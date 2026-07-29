@@ -61,7 +61,7 @@ function mapNhtsaRecord(r) {
     id: "us-" + (r.NHTSACampaignNumber || crypto.randomUUID()) + "-" + r.Make + r.Model + r.ModelYear,
     campaignNumber: r.NHTSACampaignNumber || "N/A",
     title: `${r.Make} ${r.Model} ${r.ModelYear}`,
-    manufacturer: r.Manufacturer || r.Make || "Inconnu",
+    manufacturer: (r.Make || "Inconnu").trim(),
     model: r.Model || "Inconnu",
     year: String(r.ModelYear || ""),
     category: "Automobile",
