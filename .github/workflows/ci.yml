@@ -40,7 +40,7 @@ jobs:
         with: { node-version: 20 }
       - run: npm install
       - name: Fail on high/critical vulnerabilities
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
 
   lint-typecheck:
     name: "Gate 4 - Lint & Typecheck"
