@@ -1,17 +1,11 @@
 #!/usr/bin/env node
 /**
- * Import de vraies fiches de rappel automobile depuis NHTSA (USA).
- * Aucun numero de campagne n'est invente : uniquement des fiches reelles,
- * avec le numero de campagne officiel NHTSA (ex: 19V182000).
+ * Import de vraies fiches de rappel automobile depuis NHTSA (USA), traduites en francais.
+ * Aucun numero de campagne n'est invente : uniquement des fiches reelles.
  *
- * Note de transparence : RappelConso (France) a ete retire de cet import.
- * Ses donnees ne couvrent pas reellement les vehicules (alimentaire, jouets,
- * electromenager, puericulture...) et remontaient du bruit non pertinent
- * (sieges auto, huile moteur, jouets miniatures) plutot que de vrais rappels
- * constructeur automobile. Les marques vendues uniquement en Europe et jamais
- * aux USA (Renault, Peugeot, Citroen, Dacia, SEAT, Skoda, Opel) ne peuvent
- * donc pas figurer ici : aucune source ouverte equivalente a NHTSA n'a ete
- * trouvee pour elles a ce jour.
+ * Note de transparence : la traduction utilise l'API gratuite MyMemory (sans cle).
+ * Elle a une limite quotidienne de volume ; au-dela, le texte original en anglais
+ * est conserve pour cette fiche plutot que de faire echouer tout l'import.
  */
 
 import { writeFile, mkdir } from "node:fs/promises";
@@ -22,7 +16,6 @@ const OUT_PATH = path.resolve("src/data/recalls.json");
 const NHTSA_BASE = "https://api.nhtsa.gov/recalls/recallsByVehicle";
 
 const MAKES_MODELS = [
-  // USA
   ["honda", "accord"], ["honda", "civic"], ["honda", "cr-v"], ["honda", "pilot"], ["honda", "odyssey"],
   ["toyota", "camry"], ["toyota", "corolla"], ["toyota", "rav4"], ["toyota", "highlander"], ["toyota", "tacoma"],
   ["ford", "f-150"], ["ford", "escape"], ["ford", "explorer"], ["ford", "mustang"], ["ford", "focus"],
@@ -46,7 +39,6 @@ const MAKES_MODELS = [
   ["suzuki", "swift"], ["suzuki", "vitara"],
   ["genesis", "g80"], ["genesis", "gv80"],
   ["isuzu", "d-max"], ["daihatsu", "terios"],
-  // Allemagne
   ["bmw", "3 series"], ["bmw", "x5"], ["bmw", "5 series"], ["bmw", "x3"], ["bmw", "1 series"],
   ["mercedes-benz", "c-class"], ["mercedes-benz", "e-class"], ["mercedes-benz", "gle"], ["mercedes-benz", "glc"], ["mercedes-benz", "s-class"],
   ["volkswagen", "jetta"], ["volkswagen", "tiguan"], ["volkswagen", "atlas"], ["volkswagen", "golf"], ["volkswagen", "passat"],
@@ -54,18 +46,15 @@ const MAKES_MODELS = [
   ["porsche", "cayenne"], ["porsche", "macan"], ["porsche", "911"], ["porsche", "panamera"],
   ["mini", "cooper"], ["mini", "countryman"],
   ["smart", "fortwo"],
-  // Royaume-Uni
   ["land rover", "range rover"], ["land rover", "discovery"], ["land rover", "defender"],
   ["jaguar", "f-pace"], ["jaguar", "xf"], ["jaguar", "xe"],
   ["bentley", "continental gt"], ["aston martin", "db11"], ["rolls-royce", "ghost"],
-  // Suede
   ["volvo", "xc90"], ["volvo", "xc60"], ["volvo", "s60"], ["volvo", "xc40"],
-  // Italie
   ["fiat", "500"], ["alfa romeo", "giulia"], ["alfa romeo", "stelvio"],
   ["maserati", "levante"], ["maserati", "ghibli"], ["ferrari", "portofino"], ["lamborghini", "urus"],
 ];
 
-const YEARS = Array.from({ length: 21 }, (_, i) => 2005 + i); // 2005-2025
+const YEARS = Array.from({ length: 21 }, (_, i) => 2005 + i);
 
 function mapNhtsaRecord(r) {
   return {
@@ -73,7 +62,8 @@ function mapNhtsaRecord(r) {
     campaignNumber: r.NHTSACampaignNumber || "N/A",
     title: `${r.Make} ${r.Model} ${r.ModelYear}`,
     manufacturer: r.Manufacturer || r.Make || "Inconnu",
-    model: `${r.Model} (${r.ModelYear})`,
+    model: r.Model || "Inconnu",
+    year: String(r.ModelYear || ""),
     category: "Automobile",
     publicationDate: r.ReportReceivedDate || "",
     riskDescription: r.Consequence || "",
@@ -98,11 +88,52 @@ async function fetchNhtsaRecalls(target) {
           for (const r of data.results) collected.push(mapNhtsaRecord(r));
         }
       } catch {
-        // ignore les echecs ponctuels, on continue avec la combinaison suivante
+        // ignore, on continue
       }
     }
   }
   return collected;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function translateToFrench(text) {
+  if (!text || text.trim().length === 0) return text;
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
+      text.slice(0, 490)
+    )}&langpair=en|fr`;
+    const res = await fetch(url);
+    if (!res.ok) return text;
+    const data = await res.json();
+    const translated = data?.responseData?.translatedText;
+    if (!translated || translated.includes("QUERY LENGTH LIMIT")) return text;
+    return translated;
+  } catch {
+    return text;
+  }
+}
+
+async function translateRecalls(recalls) {
+  console.log(`Traduction en francais de ${recalls.length} fiches (peut prendre du temps)...`);
+  let translated = 0;
+  for (const r of recalls) {
+    r.riskDescription = await translateToFrench(r.riskDescription);
+    await sleep(80);
+    r.reason = await translateToFrench(r.reason);
+    await sleep(80);
+    if (r.remedy) {
+      r.remedy = await translateToFrench(r.remedy);
+      await sleep(80);
+    }
+    translated++;
+    if (translated % 100 === 0) {
+      console.log(`  ... ${translated}/${recalls.length} fiches traduites`);
+    }
+  }
+  return recalls;
 }
 
 async function main() {
@@ -111,15 +142,16 @@ async function main() {
 
   if (recalls.length < TARGET_COUNT) {
     console.warn(
-      `Attention: seulement ${recalls.length} fiches recuperees sur l'objectif de ${TARGET_COUNT}. ` +
-      `Donnees 100% reelles, ecrites telles quelles.`
+      `Attention: seulement ${recalls.length} fiches recuperees sur l'objectif de ${TARGET_COUNT}.`
     );
   }
+
+  await translateRecalls(recalls);
 
   await mkdir(path.dirname(OUT_PATH), { recursive: true });
   const dataset = {
     generatedAt: new Date().toISOString(),
-    source: "NHTSA (National Highway Traffic Safety Administration, USA) - donnees publiques officielles",
+    source: "NHTSA (USA, donnees officielles) - textes traduits automatiquement en francais",
     count: recalls.length,
     recalls,
   };
