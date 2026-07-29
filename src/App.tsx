@@ -28,6 +28,94 @@ const RecallCard = memo(function RecallCard({
   );
 });
 
+interface AiCitation {
+  url?: string;
+  title?: string;
+}
+
+function AiSearch() {
+  const [question, setQuestion] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [answer, setAnswer] = useState("");
+  const [citations, setCitations] = useState<AiCitation[] | string[]>([]);
+  const [error, setError] = useState("");
+
+  const handleAsk = useCallback(async () => {
+    const q = question.trim();
+    if (!q) return;
+    setLoading(true);
+    setError("");
+    setAnswer("");
+    setCitations([]);
+    try {
+      const res = await fetch("/api/ai-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Erreur inconnue");
+      }
+      setAnswer(data.answer || "");
+      setCitations(data.citations || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur inconnue");
+    } finally {
+      setLoading(false);
+    }
+  }, [question]);
+
+  return (
+    <div className="ai-search">
+      <h2 className="ai-search-title">🔎 Recherche IA en direct sur le web</h2>
+      <p className="ai-search-subtitle">
+        Posez une question libre, ex : "Le Renault Kangoo 2021 a-t-il un rappel en cours ?"
+      </p>
+      <div className="ai-search-controls">
+        <input
+          type="text"
+          placeholder="Posez votre question..."
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleAsk()}
+        />
+        <button onClick={handleAsk} disabled={loading || !question.trim()}>
+          {loading ? "Recherche..." : "Demander"}
+        </button>
+      </div>
+      {error && <p className="ai-search-error">{error}</p>}
+      {answer && (
+        <div className="ai-search-answer">
+          <p>{answer}</p>
+          {citations.length > 0 && (
+            <div className="ai-search-citations">
+              <strong>Sources :</strong>
+              <ul>
+                {citations.map((c, i) => {
+                  const url = typeof c === "string" ? c : c.url;
+                  const label = typeof c === "string" ? c : c.title || c.url;
+                  return (
+                    <li key={i}>
+                      {url ? (
+                        <a href={url} target="_blank" rel="noreferrer">
+                          {label}
+                        </a>
+                      ) : (
+                        label
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Toutes");
@@ -63,6 +151,8 @@ export default function App() {
           {dataset.count.toLocaleString("fr-FR")} fiches officielles &middot; source : {dataset.source}
         </p>
       </header>
+
+      <AiSearch />
 
       <div className="controls">
         <input
