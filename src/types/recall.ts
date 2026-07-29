@@ -4,6 +4,7 @@ export interface Recall {
   title: string;
   manufacturer: string;
   model?: string;
+  year?: string;
   category: string;
   publicationDate: string;
   riskDescription: string;
