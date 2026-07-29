@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, useCallback } from "react";
+import { memo, useMemo, useState, useCallback, useRef } from "react";
 import type { Recall, RecallDataset } from "./types/recall";
 import rawData from "./data/recalls.json";
 import "./App.css";
@@ -22,115 +22,46 @@ const RecallCard = memo(function RecallCard({
       <p className="manufacturer">
         {recall.manufacturer}
         {recall.model ? ` - ${recall.model}` : ""}
+        {recall.year ? ` (${recall.year})` : ""}
       </p>
       <p className="reason">{recall.reason}</p>
     </li>
   );
 });
 
-interface AiCitation {
-  url?: string;
-  title?: string;
-}
-
-function AiSearch() {
-  const [question, setQuestion] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [answer, setAnswer] = useState("");
-  const [citations, setCitations] = useState<AiCitation[] | string[]>([]);
-  const [error, setError] = useState("");
-
-  const handleAsk = useCallback(async () => {
-    const q = question.trim();
-    if (!q) return;
-    setLoading(true);
-    setError("");
-    setAnswer("");
-    setCitations([]);
-    try {
-      const res = await fetch("/api/ai-search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Erreur inconnue");
-      }
-      setAnswer(data.answer || "");
-      setCitations(data.citations || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur inconnue");
-    } finally {
-      setLoading(false);
-    }
-  }, [question]);
-
-  return (
-    <div className="ai-search">
-      <h2 className="ai-search-title">🔎 Recherche IA en direct sur le web</h2>
-      <p className="ai-search-subtitle">
-        Posez une question libre, ex : "Le Renault Kangoo 2021 a-t-il un rappel en cours ?"
-      </p>
-      <div className="ai-search-controls">
-        <input
-          type="text"
-          placeholder="Posez votre question..."
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleAsk()}
-        />
-        <button onClick={handleAsk} disabled={loading || !question.trim()}>
-          {loading ? "Recherche..." : "Demander"}
-        </button>
-      </div>
-      {error && <p className="ai-search-error">{error}</p>}
-      {answer && (
-        <div className="ai-search-answer">
-          <p>{answer}</p>
-          {citations.length > 0 && (
-            <div className="ai-search-citations">
-              <strong>Sources :</strong>
-              <ul>
-                {citations.map((c, i) => {
-                  const url = typeof c === "string" ? c : c.url;
-                  const label = typeof c === "string" ? c : c.title || c.url;
-                  return (
-                    <li key={i}>
-                      {url ? (
-                        <a href={url} target="_blank" rel="noreferrer">
-                          {label}
-                        </a>
-                      ) : (
-                        label
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function App() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Toutes");
+  const [brand, setBrand] = useState("Toutes");
+  const [modelFilter, setModelFilter] = useState("Tous");
   const [selected, setSelected] = useState<Recall | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const categories = useMemo(() => {
     const set = new Set(dataset.recalls.map((r) => r.category));
     return ["Toutes", ...Array.from(set).sort()];
   }, []);
 
+  const brands = useMemo(() => {
+    const set = new Set(dataset.recalls.map((r) => r.manufacturer));
+    return ["Toutes", ...Array.from(set).sort()];
+  }, []);
+
+  const models = useMemo(() => {
+    const pool =
+      brand === "Toutes"
+        ? dataset.recalls
+        : dataset.recalls.filter((r) => r.manufacturer === brand);
+    const set = new Set(pool.map((r) => r.model).filter(Boolean) as string[]);
+    return ["Tous", ...Array.from(set).sort()];
+  }, [brand]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return dataset.recalls.filter((r) => {
-      const matchesCategory = category === "Toutes" || r.category === category;
-      if (!matchesCategory) return false;
+      if (category !== "Toutes" && r.category !== category) return false;
+      if (brand !== "Toutes" && r.manufacturer !== brand) return false;
+      if (modelFilter !== "Tous" && r.model !== modelFilter) return false;
       if (!q) return true;
       return (
         r.title.toLowerCase().includes(q) ||
@@ -139,9 +70,18 @@ export default function App() {
         r.campaignNumber.toLowerCase().includes(q)
       );
     });
-  }, [query, category]);
+  }, [query, category, brand, modelFilter]);
 
   const handleSelect = useCallback((r: Recall) => setSelected(r), []);
+
+  const handleBrandChange = useCallback((value: string) => {
+    setBrand(value);
+    setModelFilter("Tous");
+  }, []);
+
+  const handleSearchIconClick = useCallback(() => {
+    inputRef.current?.blur();
+  }, []);
 
   return (
     <div className="app">
@@ -152,15 +92,49 @@ export default function App() {
         </p>
       </header>
 
-      <AiSearch />
-
       <div className="controls">
-        <input
-          type="search"
-          placeholder="Rechercher par modele, marque ou numero de campagne..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        <div className="search-box">
+          <button
+            type="button"
+            className="search-icon-btn"
+            onClick={handleSearchIconClick}
+            aria-label="Rechercher"
+          >
+            🔍
+          </button>
+          <input
+            ref={inputRef}
+            type="search"
+            placeholder="Rechercher par modele, marque ou numero de campagne..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="filters-row">
+        <select value={brand} onChange={(e) => handleBrandChange(e.target.value)}>
+          <option value="Toutes">Toutes les marques</option>
+          {brands
+            .filter((b) => b !== "Toutes")
+            .map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+        </select>
+
+        <select value={modelFilter} onChange={(e) => setModelFilter(e.target.value)}>
+          <option value="Tous">Tous les modeles</option>
+          {models
+            .filter((m) => m !== "Tous")
+            .map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+        </select>
+
         <select value={category} onChange={(e) => setCategory(e.target.value)}>
           {categories.map((c) => (
             <option key={c} value={c}>
@@ -192,7 +166,10 @@ export default function App() {
               {selected.model && (
                 <>
                   <dt>Modele</dt>
-                  <dd>{selected.model}</dd>
+                  <dd>
+                    {selected.model}
+                    {selected.year ? ` (${selected.year})` : ""}
+                  </dd>
                 </>
               )}
               <dt>Categorie</dt>
