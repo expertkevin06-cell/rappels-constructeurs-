@@ -73,12 +73,10 @@ function mapNhtsaRecord(r) {
   };
 }
 
-async function fetchNhtsaRecalls(target) {
+async function fetchNhtsaRecalls() {
   const collected = [];
-  outer:
   for (const [make, model] of MAKES_MODELS) {
     for (const year of YEARS) {
-      if (collected.length >= target) break outer;
       const params = new URLSearchParams({ make, model, modelYear: String(year) });
       try {
         const res = await fetch(`${NHTSA_BASE}?${params.toString()}`);
@@ -138,7 +136,7 @@ async function translateRecalls(recalls) {
 
 async function main() {
   console.log(`Import automobile NHTSA -> objectif ${TARGET_COUNT} fiches`);
-  const recalls = await fetchNhtsaRecalls(TARGET_COUNT);
+  const recalls = await fetchNhtsaRecalls();
 
   if (recalls.length < TARGET_COUNT) {
     console.warn(
