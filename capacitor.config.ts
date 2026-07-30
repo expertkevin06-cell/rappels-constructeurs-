@@ -4,7 +4,10 @@ const config: CapacitorConfig = {
   appId: "com.rappels.constructeurs",
   appName: "Rappels Constructeurs",
   webDir: "dist",
-  bundledWebRuntime: false,
+  server: {
+    url: "https://rappels-constructeurs.vercel.app",
+    cleartext: false,
+  },
 };
 
 export default config;
