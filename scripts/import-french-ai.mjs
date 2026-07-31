@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Recherche IA (Perplexity, avec recherche web) de rappels reels pour les
- * marques francaises, avec source obligatoire.
+ * Recherche IA (Perplexity, avec recherche web reelle) de rappels pour les
+ * marques francaises.
  *
  * IMPORTANT - GARDE-FOU SECURITE :
- * Une fiche n'est retenue QUE si Perplexity fournit un lien source explicite.
- * Ces fiches sont marquees aiSourced:true et affichees differemment dans
- * l'app (pas comme un numero officiel verifie). Aucune fiche sans source
- * n'est ajoutee, pour eviter tout numero de campagne invente.
+ * On utilise les vraies citations renvoyees par l'API Perplexity (issues de
+ * sa recherche web reelle), pas des URLs generees de memoire par le modele.
+ * Une fiche n'est creee QUE s'il y a au moins une citation web reelle.
+ * Ces fiches sont marquees aiSourced:true.
  */
 
 import { readFile, writeFile } from "node:fs/promises";
@@ -24,95 +24,97 @@ if (!API_KEY) {
 }
 
 async function askPerplexity(brand) {
-  const prompt = `Liste les campagnes de rappel officielles reelles et verifiees pour des vehicules de la marque ${brand} en France ou en Europe (5 dernieres annees maximum). Pour CHAQUE rappel, tu dois IMPERATIVEMENT avoir une source officielle (site du constructeur, service-public.fr, ou presse specialisee fiable) sinon NE PAS l'inclure. Reponds UNIQUEMENT avec un tableau JSON valide, sans texte autour, format exact :
-[{"campaignNumber":"...","model":"...","year":"...","reason":"...","riskDescription":"...","remedy":"...","sourceUrl":"..."}]
-Si tu n'as aucune information fiable et sourcee, reponds avec un tableau vide [].`;
+  const prompt = `Quelles sont les campagnes de rappel de vehicules ${brand} les plus recentes (5 dernieres annees) en France ou en Europe ? Donne les modeles concernes, l'annee, le motif du rappel et le risque encouru. Reponds en francais, de maniere factuelle.`;
 
-  const res = await fetch("https://api.perplexity.ai/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "sonar",
-      messages: [
-        {
-          role: "system",
-          content:
-            "Tu es un assistant rigoureux specialise dans les rappels automobiles. Tu ne donnes jamais d'information non sourcee. Format de reponse : JSON strict uniquement.",
-        },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  let res;
+  try {
+    res = await fetch("https://api.perplexity.ai/chat/completions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "sonar",
+        messages: [
+          {
+            role: "system",
+            content: "Tu es un assistant factuel specialise dans les rappels automobiles. Base-toi uniquement sur des informations verifiables.",
+          },
+          { role: "user", content: prompt },
+        ],
+      }),
+    });
+  } catch (err) {
+    console.warn(`  [${brand}] Timeout ou erreur reseau: ${err.message}`);
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!res.ok) {
-    console.warn(`Echec requete Perplexity pour ${brand}: ${res.status}`);
-    return [];
+    console.warn(`  [${brand}] Echec requete: ${res.status}`);
+    return null;
   }
 
   const data = await res.json();
-  const text = data.choices?.[0]?.message?.content || "[]";
+  const answer = data.choices?.[0]?.message?.content || "";
+  const citations = Array.isArray(data.citations) ? data.citations : [];
 
-  console.log(`  [DEBUG ${brand}] Reponse brute (500 premiers caracteres):`);
-  console.log(`  ${text.slice(0, 500)}`);
+  console.log(`  [${brand}] Reponse: ${answer.length} caracteres, ${citations.length} citations reelles`);
 
-  try {
-    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    const parsed = JSON.parse(cleaned);
-    if (!Array.isArray(parsed)) {
-      console.log(`  [DEBUG ${brand}] Le JSON parse mais n'est pas un tableau.`);
-      return [];
-    }
-    console.log(`  [DEBUG ${brand}] ${parsed.length} elements avant filtre source.`);
-    const filtered = parsed.filter((r) => r.sourceUrl && String(r.sourceUrl).includes("http"));
-    console.log(`  [DEBUG ${brand}] ${filtered.length} elements apres filtre source.`);
-    return filtered;
-  } catch (e) {
-    console.warn(`  [DEBUG ${brand}] Erreur de parsing JSON: ${e.message}`);
-    return [];
+  if (citations.length === 0) {
+    console.log(`  [${brand}] Aucune citation web reelle -> fiche ignoree.`);
+    return null;
   }
+
+  return { answer, citations };
 }
 
-function mapAiRecord(brand, r) {
+function mapAiRecord(brand, answer, citations) {
   return {
-    id: "ai-fr-" + brand + "-" + (r.campaignNumber || crypto.randomUUID()),
-    campaignNumber: r.campaignNumber || "Non communique",
-    title: `${brand} ${r.model || ""} ${r.year || ""}`.trim(),
+    id: "ai-fr-" + brand + "-" + Date.now(),
+    campaignNumber: "Non communique (synthese IA)",
+    title: `${brand} - Synthese des rappels recents`,
     manufacturer: brand,
-    model: r.model || undefined,
-    year: r.year ? String(r.year) : undefined,
+    model: undefined,
+    year: undefined,
     category: "Automobile (France/Europe - recherche IA)",
     publicationDate: "",
-    riskDescription: r.riskDescription || "",
-    reason: r.reason || "",
-    remedy: r.remedy || undefined,
-    sourceUrl: r.sourceUrl,
+    riskDescription: answer.slice(0, 1000),
+    reason: "Synthese generee par recherche IA (Perplexity), basee sur des sources web reelles listees ci-dessous.",
+    remedy: undefined,
+    sourceUrl: citations[0],
     aiSourced: true,
   };
 }
 
 async function main() {
-  console.log("Recherche IA (Perplexity) de rappels francais/europeens sources...");
+  console.log("Recherche IA (Perplexity) de rappels francais/europeens, avec citations reelles...");
   const collected = [];
 
   for (const brand of FRENCH_BRANDS) {
-    console.log(`  Recherche pour ${brand}...`);
-    const results = await askPerplexity(brand);
-    for (const r of results) collected.push(mapAiRecord(brand, r));
-    console.log(`  -> ${results.length} fiches sourcees trouvees pour ${brand}`);
+    console.log(`Recherche pour ${brand}...`);
+    const result = await askPerplexity(brand);
+    if (result) {
+      collected.push(mapAiRecord(brand, result.answer, result.citations));
+      console.log(`  -> Fiche ajoutee pour ${brand} avec ${result.citations.length} sources reelles`);
+    }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  console.log(`Total fiches IA sourcees : ${collected.length}`);
+  console.log(`Total fiches IA ajoutees : ${collected.length}`);
 
   const existing = JSON.parse(await readFile(OUT_PATH, "utf-8"));
   const merged = [...existing.recalls, ...collected];
 
   const dataset = {
     generatedAt: new Date().toISOString(),
-    source: existing.source + " + recherche IA Perplexity (marques francaises, sources verifiees)",
+    source: existing.source + " + synthese IA Perplexity (marques francaises, avec sources web reelles)",
     count: merged.length,
     recalls: merged,
   };
