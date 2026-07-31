@@ -160,7 +160,15 @@ export default function App() {
             <button className="close-btn" onClick={() => setSelected(null)}>
               ×
             </button>
-            <span className="badge">{selected.campaignNumber}</span>
+            <span className={selected.aiSourced ? "badge badge-ai" : "badge"}>
+              {selected.campaignNumber}
+            </span>
+            {selected.aiSourced && (
+              <p className="ai-disclaimer">
+                ⚠️ Information trouvée par recherche IA, non issue d'une base officielle vérifiée.
+                Vérifiez toujours auprès du constructeur avant toute action.
+              </p>
+            )}
             <h2>{selected.title}</h2>
             <dl>
               <dt>Constructeur</dt>
