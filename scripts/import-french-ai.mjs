@@ -55,13 +55,22 @@ Si tu n'as aucune information fiable et sourcee, reponds avec un tableau vide []
   const data = await res.json();
   const text = data.choices?.[0]?.message?.content || "[]";
 
+  console.log(`  [DEBUG ${brand}] Reponse brute (500 premiers caracteres):`);
+  console.log(`  ${text.slice(0, 500)}`);
+
   try {
     const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
     const parsed = JSON.parse(cleaned);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((r) => r.sourceUrl && r.sourceUrl.startsWith("http"));
-  } catch {
-    console.warn(`Reponse non-JSON pour ${brand}, ignoree.`);
+    if (!Array.isArray(parsed)) {
+      console.log(`  [DEBUG ${brand}] Le JSON parse mais n'est pas un tableau.`);
+      return [];
+    }
+    console.log(`  [DEBUG ${brand}] ${parsed.length} elements avant filtre source.`);
+    const filtered = parsed.filter((r) => r.sourceUrl && String(r.sourceUrl).includes("http"));
+    console.log(`  [DEBUG ${brand}] ${filtered.length} elements apres filtre source.`);
+    return filtered;
+  } catch (e) {
+    console.warn(`  [DEBUG ${brand}] Erreur de parsing JSON: ${e.message}`);
     return [];
   }
 }
