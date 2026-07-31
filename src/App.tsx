@@ -15,7 +15,9 @@ const RecallCard = memo(function RecallCard({
   return (
     <li className="recall-card" onClick={() => onSelect(recall)}>
       <div className="recall-card-header">
-        <span className="badge">{recall.campaignNumber}</span>
+        <span className={recall.aiSourced ? "badge badge-ai" : "badge"}>
+          {recall.campaignNumber}
+        </span>
         <span className="category">{recall.category}</span>
       </div>
       <h3>{recall.title}</h3>
