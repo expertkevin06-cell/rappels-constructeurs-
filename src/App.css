@@ -38,3 +38,5 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background:
 .search-box input { width: 100%; padding: 10px 12px 10px 36px; border: 1px solid #ccc; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
 .filters-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 16px; }
 .filters-row select { flex: 1; min-width: 130px; padding: 10px; border-radius: 8px; border: 1px solid #ccc; }
+.badge-ai { background: #f0ad4e; }
+.ai-disclaimer { background: #fff3cd; color: #856404; padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; margin: 8px 0; }
