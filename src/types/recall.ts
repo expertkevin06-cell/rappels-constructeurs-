@@ -10,6 +10,7 @@ export interface Recall {
   riskDescription: string;
   reason: string;
   remedy?: string;
+  aiSourced?: boolean;
   sourceUrl?: string;
 }
 
